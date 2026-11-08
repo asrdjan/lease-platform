@@ -42,10 +42,16 @@ CREATE TABLE "Booking" (
 CREATE UNIQUE INDEX "Booking_orderId_key" ON "Booking"("orderId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Order_id_listingId_key" ON "Order"("id", "listingId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Booking_orderId_listingId_key" ON "Booking"("orderId", "listingId");
+
+-- CreateIndex
 CREATE INDEX "Booking_listingId_startAt_idx" ON "Booking"("listingId", "startAt");
 
 -- AddForeignKey
-ALTER TABLE "Booking" ADD CONSTRAINT "Booking_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Booking" ADD CONSTRAINT "Booking_orderId_listingId_fkey" FOREIGN KEY ("orderId", "listingId") REFERENCES "Order"("id", "listingId") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Booking" ADD CONSTRAINT "Booking_listingId_fkey" FOREIGN KEY ("listingId") REFERENCES "Listing"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

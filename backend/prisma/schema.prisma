@@ -104,6 +104,7 @@ model Order {
   review   Review?
   booking  Booking?
 
+  @@unique([id, listingId])
   @@index([customerId])
   @@index([providerId])
   @@index([status])
@@ -143,8 +144,9 @@ model Booking {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId, listingId], references: [id, listingId], onDelete: Cascade)
   listing Listing @relation(fields: [listingId], references: [id])
 
+  @@unique([orderId, listingId])
   @@index([listingId, startAt])
 }
