@@ -4,8 +4,8 @@
 |---|---|
 | Document ID | LEASE-DOC-03 |
 | Status | Draft for review |
-| Version | 0.1 |
-| Related | [01-ux-strategy.md](./01-ux-strategy.md), [02-requirements-BABOK.md](./02-requirements-BABOK.md) |
+| Version | 0.2 |
+| Related | [00-product-decisions.md](./00-product-decisions.md), [01-ux-strategy.md](./01-ux-strategy.md), [02-requirements-BABOK.md](./02-requirements-BABOK.md) |
 
 ---
 
@@ -33,7 +33,7 @@ A **modular monolith** was chosen over microservices for the MVP for these reaso
 | Initial migration | `backend/prisma/migrations/*_init` | Applied with `prisma migrate dev` |
 | Local database | `docker-compose.yml` | `postgres:16-alpine`, bound to `127.0.0.1:5432` |
 
-Everything else in this document is **target architecture** for later phases.
+Everything else in this document is **target architecture** for later phases. It reflects the pilot decisions in [00-product-decisions.md](./00-product-decisions.md): multi-role accounts (D-01), `SERVICE` + `ASSET` (D-02), RSD (D-03), a licensed payment partner with split payments (D-04) and a shared `Booking` model (D-06).
 
 ---
 
@@ -46,7 +46,8 @@ Everything else in this document is **target architecture** for later phases.
 | Strict authorization (two-sided + admin) | FR-M1-07, NFR-SEC-03 | RBAC guards + object-level ownership checks in services |
 | Iterative, spec-driven delivery | §2.5 of requirements | One NestJS feature module per requirement module |
 | Small team, low ops budget | Business context | Modular monolith, managed Postgres, containerized deploy |
-| GDPR / PCI scope | NFR-PRI-*, NFR-SEC-06 | Data minimization, PSP-hosted payment UI (SAQ-A), anonymization |
+| ZZPL (GDPR-style) / PCI scope | NFR-PRI-*, NFR-SEC-06 | Data minimization, partner-hosted payment page (SAQ-A), anonymization |
+| L\*ease must not hold customer funds | D-04 | Licensed partner authorizes, captures, splits and pays out; L\*ease stores only payment ids and fee snapshots |
 
 ---
 
@@ -54,9 +55,9 @@ Everything else in this document is **target architecture** for later phases.
 
 ```mermaid
 flowchart LR
-    Customer(["Customer<br/>(role: CUSTOMER)"])
-    Provider(["Provider<br/>(role: PROVIDER)"])
-    Admin(["Admin<br/>(role: ADMIN)"])
+    Customer(["Customer<br/>(roles: CUSTOMER)"])
+    Provider(["Provider<br/>(roles: CUSTOMER + PROVIDER)"])
+    Admin(["Admin<br/>(roles: ADMIN)"])
 
     subgraph LEASE["L*ease Platform"]
         Clients["Client apps<br/>Flutter (mobile/web) · Admin console"]
@@ -64,7 +65,7 @@ flowchart LR
         DB[("PostgreSQL")]
     end
 
-    PSP["Payment Service Provider<br/>(e.g. Stripe)"]
+    PSP["Licensed payment partner (RS)<br/>split payments · KYC · payouts"]
     Email["Email service<br/>(transactional)"]
     Storage["Object storage<br/>(images)"]
 
@@ -73,7 +74,7 @@ flowchart LR
     Admin --> Clients
     Clients -- "HTTPS / JSON (REST /api/v1)" --> API
     API --> DB
-    API -- "Payment intents, refunds" --> PSP
+    API -- "Authorize, capture, void, refund" --> PSP
     PSP -- "Signed webhooks" --> API
     API --> Email
     API -- "Pre-signed upload URLs" --> Storage
@@ -93,7 +94,7 @@ flowchart LR
 | **Backend API** | Node.js 22, NestJS 12 (ESM), Express adapter | Business logic, auth, orchestration, integrations | Phase 1 scaffold |
 | **Database** | PostgreSQL 16 | System of record | Phase 1 |
 | **ORM** | Prisma 6.x (`prisma-client-js`) | Type-safe data access, migrations | Phase 1 |
-| **Background jobs** | `@nestjs/schedule` (MVP) → `@nestjs/bullmq` + Redis | SLA timeouts (FR-M3-08), emails, webhook retries | Future |
+| **Background jobs** | `@nestjs/schedule` (MVP) → `@nestjs/bullmq` + Redis | Confirmation-deadline cancellations (FR-M3-08), emails, webhook retries | Future |
 | **Cache / rate-limit store** | Redis (optional in MVP) | Throttling, queues, hot catalogue caching | Future |
 | **Containerization** | Docker, Docker Compose | Local dev parity, deployable images | Phase 1 (DB only) |
 
@@ -119,11 +120,11 @@ flowchart TB
         end
         subgraph M3["Module 3"]
             Orders["OrdersModule<br/>checkout · state machine · audit"]
-            Payments["PaymentsModule<br/>PSP adapter · webhooks · refunds"]
+            Payments["PaymentsModule<br/>partner adapter · split · webhooks · refunds"]
         end
         subgraph M4["Module 4"]
             Reviews["ReviewsModule<br/>create · aggregate · moderate"]
-            Rentals["RentalsModule<br/>availability · deposits · check-in/out"]
+            Bookings["BookingsModule<br/>availability · overlap check · deposits · check-in/out"]
         end
         AdminM["AdminModule<br/>moderation · refunds · user mgmt"]
         Notify["NotificationsModule<br/>email templates · events"]
@@ -132,7 +133,7 @@ flowchart TB
     Auth --> Users
     Orders --> Listings
     Orders --> Payments
-    Rentals --> Orders
+    Bookings --> Orders
     Reviews --> Orders
     AdminM --> Users & Listings & Orders & Reviews
     Orders -. "domain events" .-> Notify
@@ -159,6 +160,8 @@ erDiagram
     Listing ||--o{ Order : "is ordered in"
     Listing ||--o{ Review : "is reviewed in"
     Order ||--o| Review : "has at most one"
+    Order ||--|| Booking : "has one (proposed)"
+    Listing ||--o{ Booking : "is booked in (proposed)"
 ```
 
 | Model | Owning module | Notes |
@@ -167,7 +170,8 @@ erDiagram
 | `Listing` | ListingsModule | `metadata` JSON validated per `ListingType` |
 | `Order` | OrdersModule (PaymentsModule writes `paymentIntentId`) | Status changes only through the state machine |
 | `Review` | ReviewsModule | Created only for `COMPLETED` orders |
-| `Rental`, `OrderStatusEvent` | RentalsModule / OrdersModule | **Proposed** future models (see requirements OI-02, FR-M3-06) |
+| `Booking` | BookingsModule | **Proposed** (D-06). Exclusion constraint prevents overlapping bookings per listing |
+| `OrderStatusEvent` | OrdersModule | **Proposed** audit model (FR-M3-06) |
 
 ---
 
@@ -187,7 +191,7 @@ sequenceDiagram
     A->>DB: find User by email
     A->>A: verify argon2id hash
     A->>DB: store hashed refresh token
-    A-->>C: accessToken (JWT, ~15 min, sub + role) + refreshToken
+    A-->>C: accessToken (JWT, ~15 min, sub + roles) + refreshToken
     C->>A: subsequent requests with Authorization: Bearer <JWT>
     Note over A: JwtAuthGuard → RolesGuard → ownership check in service
 ```
@@ -226,22 +230,30 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant N as NotificationsModule
 
-    Cu->>C: Tap "Book / Buy / Rent"
-    C->>O: POST /api/v1/orders {listingId, (rental dates)}
-    O->>DB: load active Listing, compute amount server-side
-    O->>Pay: createPaymentIntent(amount, EUR, idempotencyKey)
-    Pay->>PSP: create PaymentIntent
-    PSP-->>Pay: id + client_secret
-    O->>DB: INSERT Order (PENDING, paymentIntentId) [transaction]
-    O-->>C: 201 {orderId, client_secret}
-    C->>PSP: confirm payment (PSP SDK, SCA)
-    PSP-->>Pay: webhook payment_intent.succeeded (signed)
+    Cu->>C: Tap "Book / Rent", choose time or dates
+    C->>O: POST /api/v1/orders {listingId, startAt, endAt}
+    O->>DB: load active Listing, compute amount + platformFeeAmount server-side
+    O->>DB: INSERT Order (PENDING, RSD) + Booking (blocks slot) [transaction]
+    O->>Pay: authorize(amount, RSD, split: provider account + fee, idempotencyKey)
+    Pay->>PSP: create authorization (hold)
+    PSP-->>Pay: payment id + hosted payment page URL
+    O-->>C: 201 {orderId, paymentUrl, confirmBy}
+    C->>PSP: card entry on partner page (3-D Secure)
+    PSP-->>Pay: webhook "authorized" (signed)
     Pay->>Pay: verify signature, dedupe by event id
-    Pay->>O: markPaid(orderId)
-    O-)N: OrderPaid event → notify provider
-    Pr->>C: Accept order
-    C->>O: POST /api/v1/orders/:id/confirm
-    O->>DB: PENDING → CONFIRMED (+ audit)
+    Pay->>O: markAuthorized(orderId)
+    O-)N: OrderPlaced event → notify provider (deadline = confirmBy)
+    alt Provider confirms before confirmBy
+        Pr->>C: Accept order
+        C->>O: POST /api/v1/orders/:id/confirm
+        O->>Pay: capture(paymentId)
+        Pay->>PSP: capture with split (provider share + L*ease fee)
+        O->>DB: PENDING → CONFIRMED (+ audit)
+    else confirmBy passes
+        O->>Pay: void(paymentId)
+        O->>DB: PENDING → CANCELLED, Booking.isBlocking = false (+ audit)
+        O-)N: OrderExpired event → notify customer
+    end
     Pr->>C: Start, then complete
     C->>O: POST /orders/:id/start, /orders/:id/complete
     O->>DB: CONFIRMED → IN_PROGRESS → COMPLETED (+ audit)
@@ -267,11 +279,13 @@ sequenceDiagram
 
 ### 5.6 Actor × Capability Matrix (authorization summary)
 
+Permissions are per role. A user holding several roles (D-01) gets the union of their permissions.
+
 | Capability | Guest | CUSTOMER | PROVIDER | ADMIN |
 |---|---|---|---|---|
 | Browse / search active listings | ✔ | ✔ | ✔ | ✔ |
 | Create / edit own listings | n/a | n/a | ✔ (own) | ✔ (any, moderation) |
-| Create order | n/a | ✔ | n/a | n/a |
+| Create order | n/a | ✔ (not on own listings) | (as customer) | n/a |
 | View order | n/a | ✔ (own as customer) | ✔ (own as provider) | ✔ |
 | Transition order | n/a | cancel (own) | confirm / start / complete / cancel (own) | cancel / refund (any) |
 | Write review | n/a | ✔ (own completed order) | n/a | n/a |
@@ -284,12 +298,12 @@ sequenceDiagram
 | Area | Guideline |
 |---|---|
 | **Transport** | TLS everywhere (terminated at load balancer / ingress); HSTS; no plain HTTP in prod. |
-| **Authentication** | argon2id password hashing; JWT access tokens (≤ 15 min, claims: `sub`, `role`); rotating refresh tokens stored **hashed** and revocable. Signing keys from secret manager; plan for key rotation. |
-| **Authorization** | Deny by default. Global `JwtAuthGuard` with explicit `@Public()` opt-out. `RolesGuard` for role checks. **Object-level checks in services** (e.g. `listing.providerId === user.id`) to prevent BOLA/IDOR. |
+| **Authentication** | argon2id password hashing; JWT access tokens (≤ 15 min, claims: `sub`, `roles`); rotating refresh tokens stored **hashed** and revocable. Signing keys from secret manager; plan for key rotation. |
+| **Authorization** | Deny by default. Global `JwtAuthGuard` with explicit `@Public()` opt-out. `RolesGuard` checks that `roles` contains a required role. **Object-level checks in services** (e.g. `listing.providerId === user.id`) to prevent BOLA/IDOR. |
 | **Input validation** | DTO validation on every endpoint, using Standard Schema (Zod) with Nest's `StandardSchemaValidationPipe`, or `class-validator`. Whitelist properties and reject unknown fields. Validate `metadata` JSON per type. |
-| **Mass assignment** | Never pass request bodies straight into Prisma `create`/`update`. Server-controlled fields (`role`, `providerId`, `amount`, `status`, `authorId`) are set only by services. |
+| **Mass assignment** | Never pass request bodies straight into Prisma `create`/`update`. Server-controlled fields (`roles`, `providerId`, `amount`, `platformFeeAmount`, `status`, `authorId`) are set only by services. |
 | **Injection** | Prisma parameterizes queries. Raw SQL (`$queryRaw`) only with tagged templates, never string concatenation. |
-| **Payments** | PSP-hosted card entry (SAQ-A). Verify webhook signatures. Idempotency keys on outbound PSP calls. Dedupe inbound events by event id. |
+| **Payments** | Partner-hosted card entry (SAQ-A). Verify webhook signatures. Idempotency keys on outbound partner calls. Dedupe inbound events by event id. Funds never pass through L\*ease accounts (D-04). |
 | **Rate limiting & abuse** | `@nestjs/throttler` globally, stricter on `/auth/*`. Lock accounts after repeated failures. CAPTCHA on sign-up if abuse appears. |
 | **Secrets & config** | `@nestjs/config` with validated env schema. `.env` git-ignored (already in `backend/.gitignore`). No secrets in images or logs. |
 | **Data protection** | Minimize PII. Encrypt DB at rest (managed Postgres). Back up with encryption. GDPR export/delete, implemented as anonymization when financial records must be kept. |
@@ -306,7 +320,7 @@ sequenceDiagram
 
 - Keep the API **stateless**: no in-memory sessions, and uploads go directly to object storage. Scale horizontally with N replicas behind a load balancer.
 - Run scheduled jobs on **one** instance (leader election / `@nestjs/locks`) or move them to a dedicated worker container that uses the same image with a different entrypoint.
-- Keep long-running or external work off the request path. Use queues (`@nestjs/bullmq` + Redis) for emails, webhook processing retries and SLA timeouts.
+- Keep long-running or external work off the request path. Use queues (`@nestjs/bullmq` + Redis) for emails, webhook processing retries and confirmation-deadline cancellations.
 
 ### 7.2 Data Tier
 
@@ -332,7 +346,7 @@ sequenceDiagram
 | Integration | Pattern | Notes |
 |---|---|---|
 | **Client ↔ API** | REST/JSON over HTTPS, `/api/v1`, OpenAPI 3 generated with `@nestjs/swagger` | Generate the Flutter (Dart) API client from the OpenAPI spec so the contract stays in sync. Cursor or offset pagination with `total`. Errors use a consistent `{ code, message, details }` envelope. |
-| **Payments (PSP)** | Outbound SDK calls with idempotency keys. Inbound signed webhooks at `POST /api/v1/payments/webhook` (raw body needed for signature check). | Hide the PSP behind a `PaymentGateway` interface in `PaymentsModule` so that providers can be swapped or mocked in tests. Store only PSP ids (`paymentIntentId`), never card data. |
+| **Payments (licensed partner, D-04)** | Outbound API calls with idempotency keys. Inbound signed webhooks at `POST /api/v1/payments/webhook` (raw body needed for signature check). | Hide the partner behind a `PaymentGateway` interface in `PaymentsModule` (`authorize`, `capture`, `void`, `refund`, `onboardProvider`) so that PaySpot, Monri or another partner can be swapped or mocked in tests. Store only partner ids (`paymentIntentId`, provider account id), never card data. |
 | **Email** | Provider-agnostic `Mailer` interface (e.g. `@nestjs/mail`), event-driven | Templates per event (order status change, password reset, review prompt). |
 | **Object storage** | S3-compatible, pre-signed URLs | Validate content type and size; strip EXIF location data from images. |
 | **Webhooks out** (future) | `@nestjs/webhooks` | For partner integrations (e.g. property managers). |
@@ -389,8 +403,11 @@ flowchart LR
 | ADR-001 | Modular monolith in NestJS | Accepted | Simplicity, transactional consistency, team size |
 | ADR-002 | PostgreSQL + Prisma ORM | Accepted | Relational integrity for money and orders; type-safe client; migrations |
 | ADR-003 | Pin Prisma 6.x | Accepted | Schema uses `url = env(...)` in `datasource`, which Prisma 7+ no longer accepts |
-| ADR-004 | Single `Listing` model with `type` + JSON `metadata` | Accepted | One UX and API for three offer types. Strongly typed extension tables (e.g. `Rental`) are added when a type needs indexed fields. |
+| ADR-004 | Single `Listing` model with `type` + JSON `metadata` | Accepted | One UX and API for three offer types. Strongly typed extension tables (e.g. `Booking`, ADR-010) are added when a type needs indexed fields. |
 | ADR-005 | REST + OpenAPI (not GraphQL) for v1 | Proposed | Simple caching, easy Dart client generation |
 | ADR-006 | JWT access + rotating refresh tokens | Proposed | Stateless API for mobile clients |
-| ADR-007 | PSP-hosted payments, payment captured at checkout | Proposed | PCI scope SAQ-A; protects providers (SR-06) |
+| ADR-007 | Licensed payment partner with marketplace split; card authorized at checkout, captured on provider confirmation | Accepted (D-04) | L\*ease never holds customer funds; PCI scope SAQ-A; protects providers (SR-06); cancellation before confirmation is a void, not a refund |
 | ADR-008 | Flutter for client apps | Proposed | One codebase for iOS, Android and web |
+| ADR-009 | Multi-role accounts: `User.roles Role[]` | Accepted (D-01) | One person can be customer and provider without a second account |
+| ADR-010 | Shared `Booking` model with PostgreSQL exclusion constraint | Accepted (D-06) | One availability model for `SERVICE` and `ASSET`; overlaps blocked by the database, not only by application code |
+| ADR-011 | Single currency RSD in MVP | Accepted (D-03) | Serbian pilot and legal entity; no FX logic |

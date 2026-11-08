@@ -4,8 +4,8 @@
 |---|---|
 | Document ID | LEASE-DOC-01 |
 | Status | Draft for review |
-| Version | 0.1 |
-| Related | [02-requirements-BABOK.md](./02-requirements-BABOK.md), [03-high-level-architecture.md](./03-high-level-architecture.md) |
+| Version | 0.2 |
+| Related | [00-product-decisions.md](./00-product-decisions.md), [02-requirements-BABOK.md](./02-requirements-BABOK.md), [03-high-level-architecture.md](./03-high-level-architecture.md) |
 
 > **Note:** This document is a working hypothesis. Personas, metrics and market assumptions must be checked with discovery interviews and usage data before they are treated as facts. Items marked **[Assumption]** have not been checked.
 
@@ -23,6 +23,8 @@ Providers (individuals or small businesses) get one storefront, one order pipeli
 
 These three offer types match the `ListingType` enum in the data model (`SERVICE`, `RETAIL`, `ASSET`). The UX treats them as **variants of one listing experience**, not three separate products.
 
+**Pilot scope (D-02, D-03, D-08):** the pilot launches in **Kragujevac, Serbia**, with prices in **RSD**, and offers only **services (`SERVICE`) and shared assets (`ASSET`)**. Retail (`RETAIL`) follows in Phase 2. See [00-product-decisions.md](./00-product-decisions.md).
+
 **Vision statement:** *"Anything you need, from anyone you trust, on your terms: buy it, book it or borrow it."*
 
 ---
@@ -33,12 +35,12 @@ These three offer types match the `ListingType` enum in the data model (`SERVICE
 |---|---|
 | **1. Problem** | 1. Customers juggle separate apps for services, second-hand or local retail, and rentals or sharing, and trust signals differ across them. <br> 2. Small providers lack one affordable channel to sell services, goods and idle assets, so they rely on social media DMs and cash, with no payment protection. <br> 3. Peer-to-peer deals often fail on trust: no-shows, item condition disputes, late or no payment. |
 | **Existing alternatives** | Generic classifieds sites, social-media marketplace groups, single-vertical service platforms, single-vertical rental platforms, word of mouth. |
-| **2. Customer Segments** | **Customers:** urban and suburban residents aged 22 to 55 who are digitally comfortable and prefer access over ownership. <br> **Providers:** freelancers, sole traders, micro-businesses and asset owners with idle equipment. <br> **Early adopters [Assumption]:** people in one pilot city who already rent or lend tools and equipment peer-to-peer and hire local services online. |
+| **2. Customer Segments** | **Customers:** urban and suburban residents aged 22 to 55 who are digitally comfortable and prefer access over ownership. <br> **Providers:** freelancers, sole traders, micro-businesses and asset owners with idle equipment. <br> **Early adopters [Assumption]:** people in the pilot city, **Kragujevac** (D-08), who already rent or lend tools and equipment peer-to-peer and hire local services online. |
 | **3. Unique Value Proposition** | **One trusted marketplace to buy, book or borrow locally, with protected payments and verified reviews tied to real orders.** <br> *High-level concept:* "a local multi-vertical marketplace with escrow-style payments." |
 | **4. Solution** | 1. A single listing model with type-specific fields (`metadata`) for services, retail and assets. <br> 2. Protected checkout: payment is captured upfront and the order follows a clear status lifecycle (`PENDING` → `CONFIRMED` → `IN_PROGRESS` → `COMPLETED`, plus `CANCELLED` and `REFUNDED`). <br> 3. Verified reviews: only one review per completed order (`Review.orderId` is unique), rating both the listing and the provider. <br> 4. A provider dashboard covering listings, incoming orders and earnings. |
 | **5. Channels** | Local SEO and listing pages that search engines can index; supply-side outreach to providers (local business associations, maker spaces, trade schools); referral credits for both sides; partnerships such as property managers and co-working spaces; app stores (future Flutter app); community events in the pilot city. |
-| **6. Revenue Streams** | 1. Commission (take rate) on each completed order **[Assumption: 8–15% depending on `ListingType`]**. <br> 2. Customer service fee per order (a small flat fee or a percentage). <br> 3. Provider subscription ("Pro") for promoted listings, analytics and lower commission. <br> 4. Optional damage protection or deposit-handling fee for `ASSET` rentals (future). |
-| **7. Cost Structure** | Cloud hosting and managed PostgreSQL; payment processing fees; customer support and dispute handling; provider acquisition and marketing; KYC and identity verification (future); engineering and design salaries; legal and compliance (GDPR, consumer protection, platform-worker rules). |
+| **6. Revenue Streams** | 1. Commission on each completed order: **10% of the order amount, paid by the provider; 0% for the first 3 months of the pilot (D-05)**. <br> 2. No customer service fee in the pilot; the customer pays the listed price (D-05). <br> 3. Provider subscription ("Pro") for promoted listings, analytics and lower commission. <br> 4. Optional damage protection or deposit-handling fee for `ASSET` rentals (future). |
+| **7. Cost Structure** | Cloud hosting and managed PostgreSQL; payment processing fees; customer support and dispute handling; provider acquisition and marketing; KYC and identity verification (future); engineering and design salaries; legal and compliance (ZZPL/GDPR, consumer protection, payment-services law, platform-worker rules). |
 | **8. Key Metrics** | **North Star:** completed orders per month (`Order.status = COMPLETED`). <br> **Acquisition:** new active listings per week; activation rate (sign-up → first listing or first order). <br> **Liquidity:** search-to-order conversion; share of listings with at least one order in 30 days; time to first order for new providers. <br> **Trust:** average rating; dispute rate; cancellation rate; refund rate. <br> **Economics:** GMV (sum of `Order.amount` where `COMPLETED`), take rate, CAC per side, contribution margin per order. <br> **Retention:** 30/90-day repeat-order rate for customers; provider monthly active rate. |
 | **9. Unfair Advantage** | *To be earned, not assumed.* Candidates: (a) a cross-vertical reputation graph, where a provider's reputation carries across services, retail and assets; (b) a dense local supply in the pilot city that creates network effects; (c) proprietary trust data (completion and dispute history per user) that improves matching and risk scoring. |
 
@@ -46,14 +48,14 @@ These three offer types match the `ListingType` enum in the data model (`SERVICE
 
 ## 3. User Personas
 
-The platform serves three roles (`Role` enum): `CUSTOMER`, `PROVIDER` and `ADMIN`. A single `User` holds exactly one role at a time. The two primary marketplace personas are below. The admin persona is internal and appears briefly in §3.3.
+The platform serves three roles (`Role` enum): `CUSTOMER`, `PROVIDER` and `ADMIN`. One account can hold several roles (D-01): every user is a customer, and "Become a provider" adds the `PROVIDER` role to the same account. The two primary marketplace personas are below. The admin persona is internal and appears briefly in §3.3.
 
 ### 3.1 Customer Persona: "Mila, the pragmatic urbanite"
 
 | Attribute | Detail |
 |---|---|
 | Age / Occupation | 31, marketing specialist, hybrid remote |
-| Location | Rented apartment in a mid-sized EU city (prices in EUR) |
+| Location | Rented apartment in Kragujevac (prices in RSD) |
 | Tech profile | Mobile-first, pays with cards and wallets, uses 3–4 marketplace apps |
 | Context | Recently moved and furnished on a budget. Needs occasional services (handyman, cleaning) and short-term tools (drill, ladder, projector). Prefers not to buy things she will use once. |
 | Goals | Get things done quickly; pay a fair, transparent price; avoid being scammed; not waste weekends chasing replies |
@@ -131,7 +133,7 @@ These are outcome statements in Outcome-Driven Innovation style. Importance and 
 | Payment protection | Payment captured at checkout (`paymentIntentId`), status lifecycle, refunds | M3 |
 | One storefront for all offer types | Unified listing CRUD with type-specific `metadata` | M2 |
 | Reputation growth | Ratings aggregated per provider (`reviewsReceived`) and per listing | M4 |
-| Safe asset sharing | Rental period, deposit and condition check-in/out (future extension) | M4 |
+| Safe asset sharing | Booking period, deposit and condition check-in/out (`Booking`, D-06) | M4 |
 
 ---
 
@@ -141,7 +143,7 @@ These are outcome statements in Outcome-Driven Innovation style. Importance and 
 
 1. **One listing, three behaviors.** Shared layout; the CTA and detail fields change by `ListingType` (Book / Buy / Rent).
 2. **Price before profile.** Guests can browse and see full pricing. Authentication is required only at checkout.
-3. **Role-adaptive navigation.** The same app shows customer or provider navigation based on `User.role`.
+3. **Role-adaptive navigation.** The same app shows customer or provider navigation based on `User.roles`. Users with both roles switch between customer and provider mode (D-01).
 4. **Trust everywhere.** Rating, review count and verification badge appear on every listing card and detail page.
 5. **Mobile-first.** Primary layouts target the future Flutter mobile app. The web uses the same IA.
 
@@ -150,13 +152,13 @@ These are outcome statements in Outcome-Driven Innovation style. Importance and 
 ```mermaid
 graph TD
     Root["L*ease"] --> Public
-    Root --> CustomerArea["Customer area (role: CUSTOMER)"]
-    Root --> ProviderArea["Provider area (role: PROVIDER)"]
+    Root --> CustomerArea["Customer area (roles contain CUSTOMER)"]
+    Root --> ProviderArea["Provider area (roles contain PROVIDER)"]
     Root --> AdminArea["Admin console (role: ADMIN)"]
 
     Public --> Home["Home / Discover"]
     Public --> Search["Search & Filters<br/>type · price · keyword"]
-    Public --> Category["Browse by type<br/>Services · Retail · Assets"]
+    Public --> Category["Browse by type<br/>Services · Assets (Retail in Phase 2)"]
     Public --> ListingDetail["Listing detail<br/>price · metadata · reviews · provider"]
     Public --> ProviderProfile["Provider public profile<br/>listings · rating · reviews"]
     Public --> Auth["Sign up / Log in"]
@@ -186,10 +188,11 @@ graph TD
 
 | UX object | Backing entity | Key attributes shown to users |
 |---|---|---|
-| Account / Profile | `User` | firstName, lastName, role, member since (`createdAt`), aggregate rating |
+| Account / Profile | `User` | firstName, lastName, roles, member since (`createdAt`), aggregate rating |
 | Listing card | `Listing` | title, price, type badge, provider name, rating, review count |
 | Listing detail | `Listing` + `metadata` | description, price, type-specific fields (see §5.4), availability (future), reviews |
-| Order | `Order` | amount, currency, status timeline, listing snapshot, counterpart |
+| Order | `Order` | amount, currency (RSD), status timeline, listing snapshot, counterpart |
+| Booking | `Booking` (proposed, D-06) | start and end date/time, deposit (assets), confirmation deadline |
 | Review | `Review` | rating (1–5), comment, author first name, date, linked listing |
 
 ### 5.4 Type-Specific Listing Fields (stored in `Listing.metadata`)
@@ -197,7 +200,7 @@ graph TD
 | `ListingType` | Primary CTA | Suggested `metadata` keys **[Proposed]** |
 |---|---|---|
 | `SERVICE` | **Book** | `durationMinutes`, `serviceArea`, `pricingUnit` (`fixed`/`hour`), `availability` |
-| `RETAIL` | **Buy** | `condition` (`new`/`used`), `stockQuantity`, `deliveryOptions`, `brand` |
+| `RETAIL` (Phase 2) | **Buy** | `condition` (`new`/`used`), `stockQuantity`, `deliveryOptions`, `brand` |
 | `ASSET` | **Rent** | `pricingUnit` (`day`/`week`), `depositAmount`, `minRentalDays`, `pickupLocation`, `conditionNotes` |
 
 ### 5.5 Navigation Model
@@ -205,9 +208,11 @@ graph TD
 | Role | Primary navigation (bottom tab bar on mobile) |
 |---|---|
 | Guest | Discover · Search · Log in |
-| `CUSTOMER` | Discover · Search · Orders · Account |
+| `CUSTOMER` | Discover · Search · Orders · Account (plus "Become a provider") |
 | `PROVIDER` | Dashboard · Listings · Orders · Earnings · Account |
 | `ADMIN` | Web console only: Users · Listings · Orders · Reviews |
+
+A user holding both `CUSTOMER` and `PROVIDER` sees a mode switch in Account; the tab bar follows the active mode (D-01).
 
 ---
 
@@ -217,31 +222,31 @@ graph TD
 
 | Stage | Discover | Evaluate | Checkout | Wait / Fulfil | Use & Return | Review |
 |---|---|---|---|---|---|---|
-| **Customer action** | Searches "drill" and filters to Assets | Opens 2–3 listings, compares price, deposit and rating | Logs in or signs up, sees total, pays | Gets confirmation, arranges pickup | Picks up, uses, returns | Rates provider and item |
+| **Customer action** | Searches "drill" and filters to Assets | Opens 2–3 listings, compares price, deposit and rating | Logs in or signs up, picks dates, sees total, authorizes card payment | Gets confirmation, arranges pickup | Picks up, uses, returns | Rates provider and item |
 | **Touchpoint** | Search, filters, listing cards | Listing detail, provider profile, reviews | Auth, checkout | Order detail, notifications | Order detail (status `IN_PROGRESS`) | Write review screen |
-| **System state** | `Listing.isActive = true`, `type = ASSET` | n/a | `Order` created (`PENDING`, `paymentIntentId` set) | `CONFIRMED` by provider | `IN_PROGRESS` → `COMPLETED` | `Review` created (one per order) |
+| **System state** | `Listing.isActive = true`, `type = ASSET` | n/a | `Order` + `Booking` created (`PENDING`, card authorized) | `CONFIRMED` by provider, payment captured | `IN_PROGRESS` → `COMPLETED` | `Review` created (one per order) |
 | **Emotion** | Curious | Cautious | Anxious about paying a stranger | Reassured | Satisfied | Empowered |
 | **Pain points** | Too many irrelevant results | Unclear deposit or condition | Forced sign-up; hidden fees | Slow provider response | Disagreement over condition on return | Forgetting to review |
-| **Opportunities** | Smart defaults; location sorting (future) | Show total price including deposit upfront; verified badge | Guest browsing; one-page checkout; wallet payments | Confirmation reminders and SLA for providers (e.g. 2 hours) | Photo check-in/out (future); clear dispute path | Review prompt when the order becomes `COMPLETED` |
+| **Opportunities** | Smart defaults; location sorting (future) | Show total price including deposit upfront; verified badge | Guest browsing; one-page checkout; wallet payments | Confirmation deadline: 24 h, at the latest 2 h before the start (D-07) | Photo check-in/out (future); clear dispute path | Review prompt when the order becomes `COMPLETED` |
 
 ### 6.2 Provider Journey: "List and fulfil a service" (`SERVICE`)
 
 | Stage | Onboard | List | Receive order | Fulfil | Get paid | Grow |
 |---|---|---|---|---|---|---|
-| **Provider action** | Signs up as provider | Creates a service listing with price and area | Gets notified, reviews request | Starts and completes job | Sees earnings | Reads reviews, adjusts offer |
-| **Touchpoint** | Sign-up (role `PROVIDER`) | Listing editor | Incoming orders | Order detail actions | Earnings | Reviews received, dashboard |
-| **System state** | `User.role = PROVIDER` | `Listing` created, `isActive = true` | `Order.status = PENDING` | `CONFIRMED` → `IN_PROGRESS` → `COMPLETED` | Payout scheduled (future) | Aggregate rating updated |
+| **Provider action** | Activates "Become a provider" | Creates a service listing with price and area | Gets notified, reviews request | Starts and completes job | Sees earnings | Reads reviews, adjusts offer |
+| **Touchpoint** | Provider onboarding (adds `PROVIDER` role, payment partner KYC) | Listing editor | Incoming orders | Order detail actions | Earnings | Reviews received, dashboard |
+| **System state** | `User.roles` contains `PROVIDER` | `Listing` created, `isActive = true` | `Order.status = PENDING` | `CONFIRMED` → `IN_PROGRESS` → `COMPLETED` | Payout by payment partner (D-04) | Aggregate rating updated |
 | **Emotion** | Skeptical about fees | Hopeful | Excited | Focused | Relieved | Motivated |
 | **Pain points** | Unclear commission | Too many required fields | Low-quality requests | Customer no-show | Payout delays | Unfair review |
-| **Opportunities** | Transparent fee calculator | Templates per `ListingType`; save draft | Payment secured before confirm | Cancellation policy enforced | Clear payout schedule | Right-of-reply to reviews (future) |
+| **Opportunities** | Transparent fee calculator (10%, 0% for the first 3 months) | Templates per `ListingType`; save draft | Payment secured before confirm | Cancellation policy enforced | Clear payout schedule | Right-of-reply to reviews (future) |
 
 ### 6.3 Order Lifecycle as Experienced by Both Sides
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: Customer pays at checkout
-    PENDING --> CONFIRMED: Provider accepts
-    PENDING --> CANCELLED: Provider declines / customer cancels / timeout
+    [*] --> PENDING: Customer authorizes card payment
+    PENDING --> CONFIRMED: Provider accepts (payment captured)
+    PENDING --> CANCELLED: Provider declines / customer cancels / deadline missed (authorization voided)
     CONFIRMED --> IN_PROGRESS: Service starts / item handed over
     CONFIRMED --> CANCELLED: Cancelled before start (policy applies)
     IN_PROGRESS --> COMPLETED: Job done / item returned or delivered
@@ -267,8 +272,8 @@ stateDiagram-v2
 
 ## 8. Open Research Questions
 
-1. Which `ListingType` should launch first in the pilot to reach liquidity fastest, or should all three launch together?
-2. Will providers accept payment-before-confirmation with a confirmation SLA, and what SLA is acceptable?
-3. How do customers perceive deposits for `ASSET` rentals: a pre-authorization hold or a captured charge?
-4. Can one person act as both customer and provider? The current model allows **one** `Role` per `User`. This needs a decision: multi-role support or separate accounts.
+1. ~~Which `ListingType` should launch first?~~ **Decided (D-02):** `SERVICE` + `ASSET`; `RETAIL` in Phase 2.
+2. ~~What confirmation SLA is acceptable?~~ **Decided (D-07):** 24 hours, at the latest 2 hours before the start. To validate in the pilot: confirmation rate within the deadline (target ≥ 85%, D-09).
+3. How do customers perceive deposits for `ASSET` rentals: a pre-authorization hold or a captured charge? (Open, depends on the payment partner: OI-07.)
+4. ~~Can one person act as both customer and provider?~~ **Decided (D-01):** yes, one account with several roles (`roles Role[]`).
 5. What level of identity verification do providers accept during onboarding without abandoning it?
