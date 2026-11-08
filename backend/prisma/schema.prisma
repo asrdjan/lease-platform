@@ -19,6 +19,19 @@ enum ListingType {
   ASSET
 }
 
+enum CancellationPolicy {
+  FLEXIBLE
+  MODERATE
+  STRICT
+}
+
+enum DepositStatus {
+  NONE
+  HELD
+  RELEASED
+  CAPTURED
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -34,7 +47,8 @@ model User {
   password  String
   firstName String?
   lastName  String?
-  role      Role     @default(CUSTOMER)
+  roles     Role[]   @default([CUSTOMER])
+  locale    String   @default("sr-Latn")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -48,53 +62,59 @@ model User {
 }
 
 model Listing {
-  id          String      @id @default(uuid())
-  title       String
-  description String      @db.Text
-  price       Decimal     @db.Decimal(10, 2)
-  type        ListingType
-  metadata    Json?
-  isActive    Boolean     @default(true)
-  providerId  String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                 String             @id @default(uuid())
+  title              String
+  description        String             @db.Text
+  price              Decimal            @db.Decimal(10, 2)
+  type               ListingType
+  metadata           Json?
+  isActive           Boolean            @default(true)
+  cancellationPolicy CancellationPolicy @default(MODERATE)
+  providerId         String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  provider    User        @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  orders      Order[]
-  reviews     Review[]
+  provider User      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  orders   Order[]
+  reviews  Review[]
+  bookings Booking[]
 
   @@index([type])
   @@index([providerId])
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  amount          Decimal     @db.Decimal(10, 2)
-  currency        String      @default("EUR")
-  status          OrderStatus @default(PENDING)
-  paymentIntentId String?     @unique
-  
-  customerId      String
-  providerId      String
-  listingId       String
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                 String             @id @default(uuid())
+  amount             Decimal            @db.Decimal(10, 2)
+  currency           String             @default("RSD")
+  platformFeeAmount  Decimal            @db.Decimal(10, 2)
+  cancellationPolicy CancellationPolicy
+  status             OrderStatus        @default(PENDING)
+  paymentIntentId    String?            @unique
 
-  customer        User        @relation("CustomerOrders", fields: [customerId], references: [id])
-  provider        User        @relation("ProviderOrders", fields: [providerId], references: [id])
-  listing         Listing     @relation(fields: [listingId], references: [id])
-  review          Review?
+  customerId String
+  providerId String
+  listingId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
+  customer User     @relation("CustomerOrders", fields: [customerId], references: [id])
+  provider User     @relation("ProviderOrders", fields: [providerId], references: [id])
+  listing  Listing  @relation(fields: [listingId], references: [id])
+  review   Review?
+  booking  Booking?
+
+  @@unique([id, listingId])
   @@index([customerId])
   @@index([providerId])
   @@index([status])
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  rating    Int      @default(5)
-  comment   String?  @db.Text
-  
+  id      String  @id @default(uuid())
+  rating  Int     @default(5)
+  comment String? @db.Text
+
   authorId  String
   targetId  String
   listingId String
@@ -102,10 +122,31 @@ model Review {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id])
-  target    User     @relation("ReviewTarget", fields: [targetId], references: [id])
-  listing   Listing  @relation(fields: [listingId], references: [id])
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author  User    @relation("ReviewAuthor", fields: [authorId], references: [id])
+  target  User    @relation("ReviewTarget", fields: [targetId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  orderId       String        @unique
+  listingId     String
+  startAt       DateTime
+  endAt         DateTime
+  isBlocking    Boolean       @default(true)
+  depositAmount Decimal?      @db.Decimal(10, 2)
+  depositStatus DepositStatus @default(NONE)
+  handoverNotes String?       @db.Text
+  returnNotes   String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  order   Order   @relation(fields: [orderId, listingId], references: [id, listingId], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@unique([orderId, listingId])
+  @@index([listingId, startAt])
 }
