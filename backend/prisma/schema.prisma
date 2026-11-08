@@ -87,8 +87,8 @@ model Order {
   id                 String             @id @default(uuid())
   amount             Decimal            @db.Decimal(10, 2)
   currency           String             @default("RSD")
-  platformFeeAmount  Decimal            @default(0) @db.Decimal(10, 2)
-  cancellationPolicy CancellationPolicy @default(MODERATE)
+  platformFeeAmount  Decimal            @db.Decimal(10, 2)
+  cancellationPolicy CancellationPolicy
   status             OrderStatus        @default(PENDING)
   paymentIntentId    String?            @unique
 
