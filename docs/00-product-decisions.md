@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | LEASE-DOC-00 |
 | Status | Approved by Product Owner |
-| Version | 1.0 |
+| Version | 1.1 |
 | Decision date | 2026-11-08 |
 | Decision owner | Product Owner / Founder |
 | Related | [01-ux-strategy.md](./01-ux-strategy.md), [02-requirements-BABOK.md](./02-requirements-BABOK.md), [03-high-level-architecture.md](./03-high-level-architecture.md) |
@@ -26,6 +26,8 @@ This log records the product decisions taken in the pilot-definition workshop. T
 | D-07 | Confirmation deadline | The provider must confirm within **24 hours, and no later than 2 hours before the booking starts**, whichever comes first. Otherwise the order is cancelled automatically and the card authorization is released. | UX Q2 |
 | D-08 | Pilot city | **Kragujevac**, whole city as one zone. | UX Q-pilot |
 | D-09 | Pilot length and targets | **6-month pilot** (3 months at 0% commission, 3 months at 10%) with the targets in §3. | BO-1…BO-5 |
+| D-10 | Customer cancellation | The provider chooses a cancellation policy per listing: **Flexible**, **Moderate** (default) or **Strict** (§2, D-10). | OI-08 |
+| D-11 | App languages | **Serbian (Latin script) and English** from launch. | OI-09 |
 
 ---
 
@@ -127,6 +129,24 @@ ALTER TABLE "Booking" ADD CONSTRAINT "Booking_valid_range" CHECK ("endAt" > "sta
 
 - **Decision:** 6 months: months 1–3 at 0% commission, months 4–6 at 10%. Targets are estimates for a city of Kragujevac's size and are revalidated after month 3.
 
+### D-10: Cancellation policy chosen per listing
+
+- **Decision:** each listing has a `cancellationPolicy` chosen by the provider. Refund to the customer when the customer cancels a confirmed order:
+
+| Policy | Full refund | 50% refund | No refund |
+|---|---|---|---|
+| `FLEXIBLE` | until 2 h before start | n/a | less than 2 h before start |
+| `MODERATE` (default) | until 24 h before start | 24 h to 2 h before start | less than 2 h before start |
+| `STRICT` | until 72 h before start | 72 h to 24 h before start | less than 24 h before start |
+
+- **Rules for all policies:** cancelling before the provider confirms is always free (authorization voided); a customer no-show gets no refund; if the provider cancels a confirmed order the customer gets a full refund and the cancellation is recorded in the provider's statistics; the platform fee applies only to the part the provider keeps.
+- **Consequences:** `Listing.cancellationPolicy` enum (default `MODERATE`); the policy is copied to the order at creation (`Order.cancellationPolicy`) so later listing edits do not affect existing bookings; partial refunds become a `Must` (FR-M3-12) and must be supported by the payment partner (OI-05). Whether the consumer right of withdrawal for distance contracts applies is part of the legal review (OI-06).
+
+### D-11: Serbian (Latin) and English from launch
+
+- **Decision:** all client texts, emails and the public catalogue are available in Serbian (Latin script, `sr-Latn`) and English (`en`) from day one.
+- **Consequences:** the API returns machine-readable error codes; clients translate them. Flutter uses ARB files (`intl`) for `sr-Latn` and `en`. `User.locale` (proposed, default `sr-Latn`) selects the language of emails and notifications. Listing content (title, description) is written by providers in one language and is not translated in the pilot. Every new text needs both translations before release.
+
 ## 3. Pilot Targets (end of month 6)
 
 | Metric | Target | Source of measure |
@@ -143,8 +163,6 @@ ALTER TABLE "Booking" ADD CONSTRAINT "Booking_valid_range" CHECK ("endAt" > "sta
 
 | ID | Topic | Owner | Needed by |
 |---|---|---|---|
-| OI-05 | Choose the payment partner and confirm contract terms (see D-04) | Product Owner | Before Module 3 |
+| OI-05 | Choose the payment partner and confirm contract terms (see D-04), including partial refunds (D-10) | Product Owner | Before Module 3 |
 | OI-06 | Legal review of the money flow under the Serbian Law on Payment Services | Product Owner / Legal | Before go-live |
 | OI-07 | Deposit handling for `ASSET`: second authorization hold or captured amount; depends on partner | Product Owner / Architect | Before Module 4b |
-| OI-08 | Customer cancellation policy (free cancellation window, fees, refund rules) | Product Owner | Before Module 3 |
-| OI-09 | App language(s) for the pilot (e.g. Serbian Latin, Cyrillic, English) | Product Owner | Before client UI work |

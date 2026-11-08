@@ -146,6 +146,7 @@ These are outcome statements in Outcome-Driven Innovation style. Importance and 
 3. **Role-adaptive navigation.** The same app shows customer or provider navigation based on `User.roles`. Users with both roles switch between customer and provider mode (D-01).
 4. **Trust everywhere.** Rating, review count and verification badge appear on every listing card and detail page.
 5. **Mobile-first.** Primary layouts target the future Flutter mobile app. The web uses the same IA.
+6. **Bilingual from launch.** Every screen, email and error message exists in Serbian (Latin) and English; the user picks the language in Account (D-11).
 
 ### 5.2 Sitemap
 
@@ -190,7 +191,7 @@ graph TD
 |---|---|---|
 | Account / Profile | `User` | firstName, lastName, roles, member since (`createdAt`), aggregate rating |
 | Listing card | `Listing` | title, price, type badge, provider name, rating, review count |
-| Listing detail | `Listing` + `metadata` | description, price, type-specific fields (see §5.4), availability (future), reviews |
+| Listing detail | `Listing` + `metadata` | description, price, type-specific fields (see §5.4), availability, cancellation policy (Flexible / Moderate / Strict, D-10), reviews |
 | Order | `Order` | amount, currency (RSD), status timeline, listing snapshot, counterpart |
 | Booking | `Booking` (proposed, D-06) | start and end date/time, deposit (assets), confirmation deadline |
 | Review | `Review` | rating (1–5), comment, author first name, date, linked listing |

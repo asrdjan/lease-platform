@@ -236,6 +236,7 @@ Each module lists its **data entities** (from `schema.prisma`), **functional req
 | FR-M2-10 | The system shall support listing images (upload to object storage; URLs referenced in `metadata` or a future `ListingImage` model). | S | SR-01 |
 | FR-M2-11 | The system shall support location-based search (distance from customer). Not needed in the single-zone pilot (D-08). | C | SR-01 |
 | FR-M2-12 | While `RETAIL` is disabled (pilot), the system shall reject creating `RETAIL` listings with HTTP 400 and hide the type from the catalogue. The switch is configuration (D-02). | M | BR-01 |
+| FR-M2-13 | The system shall let a provider choose a cancellation policy per listing (`FLEXIBLE`, `MODERATE` default, `STRICT`) and copy it to each order at creation (D-10). | M | SR-02, SR-06 |
 
 **Acceptance criteria (examples):**
 
@@ -256,7 +257,7 @@ Each module lists its **data entities** (from `schema.prisma`), **functional req
 | `PENDING` → `CONFIRMED` | Provider (owner) | Before `confirmBy` (D-07); payment captured with split on confirmation (D-04) |
 | `PENDING` → `CANCELLED` | Customer, Provider, System (`confirmBy` passed) | Card authorization voided; booking slot released |
 | `CONFIRMED` → `IN_PROGRESS` | Provider | n/a |
-| `CONFIRMED` → `CANCELLED` | Customer, Provider, Admin | Cancellation policy applies (OI-08); booking slot released |
+| `CONFIRMED` → `CANCELLED` | Customer, Provider, Admin | Refund per the order's cancellation policy (D-10); booking slot released |
 | `IN_PROGRESS` → `COMPLETED` | Provider (customer may confirm, see FR-M3-08) | n/a |
 | `CANCELLED` → `REFUNDED` | System / Admin | Captured funds returned through PSP |
 | `COMPLETED` → `REFUNDED` | Admin | Dispute upheld |
@@ -276,10 +277,11 @@ Any other transition shall be rejected.
 | FR-M3-09 | The system shall allow an admin to refund an order (full refund in MVP), moving it to `REFUNDED` through the PSP. | M | SR-11 |
 | FR-M3-10 | The system shall notify the counterpart by email on each status change. | S | SR-03 |
 | FR-M3-11 | The system shall provide providers with an earnings summary (sum of `COMPLETED` amounts minus `platformFeeAmount`) for a date range. | S | SR-07, BR-03 |
-| FR-M3-12 | The system shall support partial refunds. | W | n/a |
+| FR-M3-12 | The system shall support partial refunds through the payment partner. | M | SR-02, D-10 |
 | FR-M3-13 | The system shall capture the authorized payment when the provider confirms the order, with the split executed by the payment partner. | M | SR-02, SR-06, BR-02 |
 | FR-M3-14 | The system shall compute the platform fee server-side from a configured commission rate (default 10%) and promotional window (0% for the first 3 pilot months), and store it on the order as `platformFeeAmount` at creation (D-05). | M | BR-03 |
 | FR-M3-15 | The system shall reject orders whose booking starts earlier than a configurable minimum lead time (default 3 hours) so that `confirmBy` is in the future **[Proposed]**. | M | SR-06 |
+| FR-M3-16 | When a confirmed order is cancelled, the system shall compute the refund server-side from the order's `cancellationPolicy` snapshot and the time left before `booking.startAt`: full refund if the provider cancels; per-policy full, 50% or no refund if the customer cancels (D-10). The platform fee is recalculated on the amount the provider keeps. | M | SR-02, SR-06 |
 
 **Acceptance criteria (examples):**
 
@@ -287,6 +289,7 @@ Any other transition shall be rejected.
 - **AC-M3-04-a:** *Given* the partner's "payment authorized" webhook is delivered twice, *then* the order state changes only once and both deliveries return HTTP 2xx.
 - **AC-M3-05-a:** *Given* an order in `COMPLETED`, *when* a provider requests a transition to `IN_PROGRESS`, *then* HTTP 409 is returned.
 - **AC-M3-08-a:** *Given* an order created at 10:00 for a booking starting at 18:00 the same day, *then* `confirmBy = 16:00`; *when* the provider has not confirmed by 16:00, *then* the order becomes `CANCELLED` and the authorization is voided.
+- **AC-M3-16-a:** *Given* a confirmed order with policy `MODERATE` and `startAt` in 10 hours, *when* the customer cancels, *then* 50% of `amount` is refunded and the order becomes `CANCELLED`; with policy `STRICT` nothing is refunded.
 - **AC-M3-14-a:** *Given* an order of 2,500.00 RSD placed in pilot month 4, *then* `platformFeeAmount = 250.00`; in pilot month 2 it is `0.00`.
 
 ### Module 4: Reviews & Asset Sharing
@@ -345,7 +348,7 @@ Any other transition shall be rejected.
 | NFR-OBS-01 | Observability | Structured JSON logs with request ID, health endpoint (`/health`), and error tracking. | S |
 | NFR-INT-01 | Interoperability | REST API, versioned (`/api/v1`), documented with OpenAPI 3 (`@nestjs/swagger`). | M |
 | NFR-USA-01 | Usability | Client UIs shall meet WCAG 2.1 AA. | S |
-| NFR-I18N-01 | Localization | API returns machine-readable error codes. Currency formatting is client-side (`sr-RS`). MVP currency is RSD (D-03). UI languages: OI-09. | S |
+| NFR-I18N-01 | Localization | Clients, emails and notifications shall be available in Serbian (Latin, `sr-Latn`) and English (`en`) from launch (D-11). API returns machine-readable error codes that clients translate. Email language follows `User.locale`. Currency formatting is client-side. MVP currency is RSD (D-03). | M |
 | NFR-PORT-01 | Portability | All services run in Docker; local dev through `docker compose`. | M |
 
 ---
@@ -360,6 +363,9 @@ Any other transition shall be rejected.
 | Listing | price | Decimal(10,2) | > 0 |
 | Listing | type | Enum ListingType | Required, immutable after first order **[Proposed]** |
 | Listing | metadata | JSON | Validated per type (FR-M2-02) |
+| Listing | cancellationPolicy **[Proposed]** | Enum | `FLEXIBLE` / `MODERATE` (default) / `STRICT` (FR-M2-13) |
+| Order | cancellationPolicy **[Proposed]** | Enum | Snapshot of the listing policy at order creation |
+| User | locale **[Proposed]** | String | `sr-Latn` (default) or `en` (D-11) |
 | Order | amount | Decimal(10,2) | Server-computed (FR-M3-01) |
 | Order | currency | String | ISO 4217; `RSD` in MVP |
 | Order | platformFeeAmount | Decimal(10,2) **[Proposed]** | Server-computed snapshot (FR-M3-14) |
@@ -438,5 +444,5 @@ Referential rules from the schema: deleting a `User` cascades to their `Listing`
 | OI-05 | Choose payment partner and confirm contract terms | Product Owner | Before Module 3 | Open |
 | OI-06 | Legal review of the money flow (Law on Payment Services) | Product Owner / Legal | Before go-live | Open |
 | OI-07 | Deposit handling for `ASSET` (hold vs capture) | Product Owner / Architect | Before Module 4b | Open |
-| OI-08 | Customer cancellation policy and refund rules | Product Owner | Before Module 3 | Open |
-| OI-09 | App language(s) for the pilot | Product Owner | Before client UI work | Open |
+| OI-08 | Customer cancellation policy and refund rules | Product Owner | Before Module 3 | Resolved: D-10 |
+| OI-09 | App language(s) for the pilot | Product Owner | Before client UI work | Resolved: D-11 |

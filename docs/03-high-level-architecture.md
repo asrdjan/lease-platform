@@ -345,7 +345,7 @@ Permissions are per role. A user holding several roles (D-01) gets the union of 
 
 | Integration | Pattern | Notes |
 |---|---|---|
-| **Client ↔ API** | REST/JSON over HTTPS, `/api/v1`, OpenAPI 3 generated with `@nestjs/swagger` | Generate the Flutter (Dart) API client from the OpenAPI spec so the contract stays in sync. Cursor or offset pagination with `total`. Errors use a consistent `{ code, message, details }` envelope. |
+| **Client ↔ API** | REST/JSON over HTTPS, `/api/v1`, OpenAPI 3 generated with `@nestjs/swagger` | Generate the Flutter (Dart) API client from the OpenAPI spec so the contract stays in sync. Cursor or offset pagination with `total`. Errors use a consistent `{ code, message, details }` envelope; clients translate `code` into `sr-Latn` or `en` (D-11). |
 | **Payments (licensed partner, D-04)** | Outbound API calls with idempotency keys. Inbound signed webhooks at `POST /api/v1/payments/webhook` (raw body needed for signature check). | Hide the partner behind a `PaymentGateway` interface in `PaymentsModule` (`authorize`, `capture`, `void`, `refund`, `onboardProvider`) so that PaySpot, Monri or another partner can be swapped or mocked in tests. Store only partner ids (`paymentIntentId`, provider account id), never card data. |
 | **Email** | Provider-agnostic `Mailer` interface (e.g. `@nestjs/mail`), event-driven | Templates per event (order status change, password reset, review prompt). |
 | **Object storage** | S3-compatible, pre-signed URLs | Validate content type and size; strip EXIF location data from images. |
@@ -411,3 +411,5 @@ flowchart LR
 | ADR-009 | Multi-role accounts: `User.roles Role[]` | Accepted (D-01) | One person can be customer and provider without a second account |
 | ADR-010 | Shared `Booking` model with PostgreSQL exclusion constraint | Accepted (D-06) | One availability model for `SERVICE` and `ASSET`; overlaps blocked by the database, not only by application code |
 | ADR-011 | Single currency RSD in MVP | Accepted (D-03) | Serbian pilot and legal entity; no FX logic |
+| ADR-012 | Cancellation policy per listing, snapshotted on the order | Accepted (D-10) | Providers control risk; refunds computed server-side from the snapshot, so listing edits never change existing bookings |
+| ADR-013 | Bilingual (`sr-Latn`, `en`); API returns error codes, clients translate | Accepted (D-11) | One API for both languages; Flutter ARB files; `User.locale` drives email language |
