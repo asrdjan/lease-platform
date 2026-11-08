@@ -12,13 +12,14 @@ ALTER TABLE "Order" ADD COLUMN     "cancellationPolicy" "CancellationPolicy" NOT
 ADD COLUMN     "platformFeeAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
 ALTER COLUMN "currency" SET DEFAULT 'RSD';
 
--- AlterTable: User.role -> User.roles, keeping each user's existing role
+-- AlterTable: User.role -> User.roles, converted in place in one statement so no row can miss the conversion
 ALTER TABLE "User" ADD COLUMN     "locale" TEXT NOT NULL DEFAULT 'sr-Latn',
-ADD COLUMN     "roles" "Role"[] DEFAULT ARRAY['CUSTOMER']::"Role"[];
+ALTER COLUMN "role" DROP DEFAULT,
+ALTER COLUMN "role" DROP NOT NULL,
+ALTER COLUMN "role" TYPE "Role"[] USING ARRAY["role"],
+ALTER COLUMN "role" SET DEFAULT ARRAY['CUSTOMER']::"Role"[];
 
-UPDATE "User" SET "roles" = ARRAY["role"];
-
-ALTER TABLE "User" DROP COLUMN "role";
+ALTER TABLE "User" RENAME COLUMN "role" TO "roles";
 
 -- CreateTable
 CREATE TABLE "Booking" (
