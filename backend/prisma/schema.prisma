@@ -1,0 +1,111 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum ListingType {
+  SERVICE
+  RETAIL
+  ASSET
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listings         Listing[]
+  ordersAsCustomer Order[]   @relation("CustomerOrders")
+  ordersAsProvider Order[]   @relation("ProviderOrders")
+  reviewsGiven     Review[]  @relation("ReviewAuthor")
+  reviewsReceived  Review[]  @relation("ReviewTarget")
+
+  @@index([email])
+}
+
+model Listing {
+  id          String      @id @default(uuid())
+  title       String
+  description String      @db.Text
+  price       Decimal     @db.Decimal(10, 2)
+  type        ListingType
+  metadata    Json?
+  isActive    Boolean     @default(true)
+  providerId  String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  provider    User        @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  reviews     Review[]
+
+  @@index([type])
+  @@index([providerId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  amount          Decimal     @db.Decimal(10, 2)
+  currency        String      @default("EUR")
+  status          OrderStatus @default(PENDING)
+  paymentIntentId String?     @unique
+  
+  customerId      String
+  providerId      String
+  listingId       String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  customer        User        @relation("CustomerOrders", fields: [customerId], references: [id])
+  provider        User        @relation("ProviderOrders", fields: [providerId], references: [id])
+  listing         Listing     @relation(fields: [listingId], references: [id])
+  review          Review?
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int      @default(5)
+  comment   String?  @db.Text
+  
+  authorId  String
+  targetId  String
+  listingId String
+  orderId   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  target    User     @relation("ReviewTarget", fields: [targetId], references: [id])
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
